@@ -60,16 +60,16 @@ public class IngSimulation extends JFrame {
 	Ing oldestPrey;
 	
 	// GUI components
-	Canvas canvas =				 new Canvas();
+	Canvas canvas =			 new Canvas();
 	JPanel controlPanel =		 new JPanel();
 	
-	JPanel speedPanel =			 new JPanel();
-	JLabel speedLabel =			 new JLabel("Speed");
+	JPanel speedPanel =		 new JPanel();
+	JLabel speedLabel =		 new JLabel("Speed");
 	JSlider speedSlider =		 new JSlider();
 	JLabel oldestLabel1 =		 new JLabel("0");
 	JLabel oldestLabel2 =		 new JLabel("0");
 	
-	JPanel minPanel =			 new JPanel();
+	JPanel minPanel =		 new JPanel();
 	JLabel minPopLabel =		 new JLabel("Min Population:");
 	JTextField minPopText =		 new JTextField(2);
 	JLabel minMateLabel =		 new JLabel("Mate Distance:");
@@ -77,15 +77,15 @@ public class IngSimulation extends JFrame {
 	JLabel minEatLabel =		 new JLabel("Eat Distance:");
 	JTextField minEatText =		 new JTextField(2);
 	
-	JPanel tickPanel =			 new JPanel();
+	JPanel tickPanel =		 new JPanel();
 	JLabel ticksMateLabel =		 new JLabel("Ticks to Mate Again:");
 	JTextField ticksMateText =	 new JTextField(3);
-	JLabel ticksHungryLabel =	 new JLabel("Ticks until Hungry:");
-	JTextField ticksHungryText = new JTextField(3);
+	JLabel ticksHungryLabel 	 new JLabel("Ticks until Hungry:");
+	JTextField ticksHungryText 	 new JTextField(3);
 	JLabel ticksDeathLabel =	 new JLabel("Ticks until Death:");
 	JTextField ticksDeathText =	 new JTextField(3);
 	
-	Timer timer =				 new Timer(50,new TimerHandler());
+	Timer timer =			 new Timer(50,new TimerHandler());
 	
 	public static void main(String[] args) {
 		new IngSimulation().setVisible(true);
