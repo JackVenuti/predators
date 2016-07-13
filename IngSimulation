@@ -1,0 +1,716 @@
+/* IngSimulation Java program by Jack Venuti, last edited 13 July 2016
+ * 
+ * Main class contains all necessary inner classes (Ing, Canvas, Handlers)
+ * 
+ * This program is an evolution simulator using two types of creatures (called Ing) -
+ * predators and prey. Each Ing can mate with an Ing of similar type. Predators can 
+ * eat prey and must do so to survive, prey must survive by not being eaten.
+ * 
+ * Each Ing has a set of genes determining how moves based on other nearby Ing. Ing
+ * with genes facilitating survivial will live to mate and pass on genes to children.
+ * 
+ * This simulation includes repopulation: if the number of predators or prey drops 
+ * below the set threshold, randomly generated Ing will be created up to the min.
+ * This can be turned off by setting the minimum population to 0.
+ * 
+ * Several other parameters can be changed mid-simulation.
+ * 
+ * This program is not finished yet - better GUI values needed for optimal evolution.
+ * Currently, either Ing die too quickly to evolve or populate too quickly and take over.
+ */
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import java.util.Random;
+
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
+import javax.swing.Timer;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+
+@SuppressWarnings("serial")
+public class IngSimulation extends JFrame {
+
+	// initial GUI values
+	static int minMateDistance = 4;
+	static int minEatDistance = 4;	
+	static int ticksUntilAbleToMate = 300;
+	static int ticksUntilHungry = 25;
+	static int ticksUntilDeath = 200;
+	int minPop = 10;
+	
+	// number of Ing initially
+	int initPop = 15;
+	
+	// Ing in the simulation
+	ArrayList<Ing> predators;
+	ArrayList<Ing> prey;
+	
+	// current oldest Ing of each type
+	Ing oldestPred;
+	Ing oldestPrey;
+	
+	// GUI components
+	Canvas canvas =				 new Canvas();
+	JPanel controlPanel =		 new JPanel();
+	
+	JPanel speedPanel =			 new JPanel();
+	JLabel speedLabel =			 new JLabel("Speed");
+	JSlider speedSlider =		 new JSlider();
+	JLabel oldestLabel1 =		 new JLabel("0");
+	JLabel oldestLabel2 =		 new JLabel("0");
+	
+	JPanel minPanel =			 new JPanel();
+	JLabel minPopLabel =		 new JLabel("Min Population:");
+	JTextField minPopText =		 new JTextField(2);
+	JLabel minMateLabel =		 new JLabel("Mate Distance:");
+	JTextField minMateText =	 new JTextField(2);
+	JLabel minEatLabel =		 new JLabel("Eat Distance:");
+	JTextField minEatText =		 new JTextField(2);
+	
+	JPanel tickPanel =			 new JPanel();
+	JLabel ticksMateLabel =		 new JLabel("Ticks to Mate Again:");
+	JTextField ticksMateText =	 new JTextField(3);
+	JLabel ticksHungryLabel =	 new JLabel("Ticks until Hungry:");
+	JTextField ticksHungryText = new JTextField(3);
+	JLabel ticksDeathLabel =	 new JLabel("Ticks until Death:");
+	JTextField ticksDeathText =	 new JTextField(3);
+	
+	Timer timer =				 new Timer(50,new TimerHandler());
+	
+	public static void main(String[] args) {
+		new IngSimulation().setVisible(true);
+	}
+	
+	public IngSimulation() {
+		setSize(720,720);
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		
+		// set up GUI
+		setLayout(new BorderLayout());
+		add(canvas,BorderLayout.CENTER);
+		add(controlPanel,BorderLayout.SOUTH);
+			controlPanel.setLayout(new GridLayout(0,1));
+			controlPanel.add(speedPanel);
+				speedPanel.add(speedLabel);
+				speedPanel.add(speedSlider);
+				speedPanel.add(oldestLabel1);
+				speedPanel.add(oldestLabel2);
+			controlPanel.add(minPanel);
+				minPanel.add(minPopLabel);
+				minPanel.add(minPopText);
+				minPanel.add(minMateLabel);
+				minPanel.add(minMateText);
+				minPanel.add(minEatLabel);
+				minPanel.add(minEatText);
+			controlPanel.add(tickPanel);
+				tickPanel.add(ticksMateLabel);
+				tickPanel.add(ticksMateText);
+				tickPanel.add(ticksHungryLabel);
+				tickPanel.add(ticksHungryText);
+				tickPanel.add(ticksDeathLabel);
+				tickPanel.add(ticksDeathText);
+				
+		TextHandler textHandle = new TextHandler();
+		minPopText.addActionListener(textHandle);
+		minMateText.addActionListener(textHandle);
+		minEatText.addActionListener(textHandle);
+		ticksMateText.addActionListener(textHandle);
+		ticksHungryText.addActionListener(textHandle);
+		ticksDeathText.addActionListener(textHandle);
+		
+		// set initial text values
+		minPopText.setText(Integer.toString(minPop));
+		minMateText.setText(Integer.toString(minMateDistance));
+		minEatText.setText(Integer.toString(minEatDistance));
+		ticksMateText.setText(Integer.toString(ticksUntilAbleToMate));
+		ticksHungryText.setText(Integer.toString(ticksUntilHungry));
+		ticksDeathText.setText(Integer.toString(ticksUntilDeath));
+			
+		speedSlider.addChangeListener(new SpeedSliderHandler());
+		speedSlider.setMaximum(80);
+		speedSlider.setValue(30);
+		
+		// populate with Ings
+		predators = getNewIngs(initPop,1);
+		prey = getNewIngs(initPop*2,2);
+		
+		// set initial oldest predator and prey
+		oldestPred = predators.get(0);
+		oldestPrey = prey.get(0);
+		
+		timer.start();
+	}
+	
+	// randomly generate n new Ings, with randomly generated genomes
+	public ArrayList<Ing> getNewIngs(int n, int type) {
+		Random rand = new Random();
+		ArrayList<Ing> newIngs = new ArrayList<Ing>();
+		for(int i = 0; i < n; i++) {
+			int[] genome = new int[Ing.numOfGenes];
+			for(int j = 0, m = Ing.numOfGenes; j < m; j++) {
+				genome[j] = rand.nextInt(Ing.geneMaxValues[j]-Ing.geneMinValues[j])+Ing.geneMinValues[j];
+			}
+			newIngs.add(new Ing(genome, type, rand.nextInt(getWidth()-100)+50, 
+					rand.nextInt(getWidth()-100)+50, rand.nextInt(360), rand.nextInt(6)+2));
+		}
+		return newIngs;
+	}
+	
+	// change simulation speed upon slider change by changing timer delay between firings
+	public class SpeedSliderHandler implements ChangeListener {
+		@Override
+		public void stateChanged(ChangeEvent e) {
+			
+			// if slider is at 0, set delay to 10 seconds (essentially pausing it)
+			if(speedSlider.getValue()==0) {
+				timer.setDelay(10000);
+			}
+			else {
+				if(timer.getDelay()==10000) {
+					timer.restart();
+				}
+				// normal change
+				timer.setDelay((int)Math.pow(2, ((double)(80-speedSlider.getValue()))/10.0)-1);
+			}
+		}
+	} 
+	
+	// update variables represented by text boxes upon editing
+	public class TextHandler implements ActionListener {
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			try {
+				minPop = Integer.parseInt(minPopText.getText());
+			} catch (NumberFormatException ex) {}
+			try {
+				minMateDistance = Integer.parseInt(minMateText.getText());
+			} catch (NumberFormatException ex) {}
+			try {
+				minEatDistance = Integer.parseInt(minEatText.getText());
+			} catch (NumberFormatException ex) {}
+			try {
+				ticksUntilAbleToMate = Integer.parseInt(ticksMateText.getText());
+			} catch (NumberFormatException ex) {}
+			try {
+				ticksUntilHungry = Integer.parseInt(ticksHungryText.getText());
+			} catch (NumberFormatException ex) {}
+			try {
+				ticksUntilDeath = Integer.parseInt(ticksDeathText.getText());
+			} catch (NumberFormatException ex) {}
+		}
+	}
+	
+	public class TimerHandler implements ActionListener {
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			
+			// update all predators
+			for(int i = predators.size()-1; i >= 0; i--) {
+				
+				// predators must update first to see if they die on this tick
+				Ing child = predators.get(i).update(width,height,predators,prey);
+				
+				// if predator died from hunger, remove it
+				if(predators.get(i).isDead) {
+					// if it was the oldest, find the next oldest
+					if(predators.get(i).equals(oldestPred)) {
+						oldestPred = predators.get(0);
+						if(i == 0) {
+							oldestPred = predators.get(1);
+						}
+						for(Ing j : predators) {
+							if(j.age > oldestPred.age) {
+								if(!j.equals(predators.get(i))) {
+									oldestPred = j;
+								}
+							}
+						}
+					}
+					predators.remove(i);
+					continue;
+				}
+				
+				// if a child was created, add to list
+				// run after checking death: dead Ing can't have children
+				if (child != null) {
+					predators.add(child);
+				}
+			}
+			
+			// update all prey
+			for(int i = prey.size()-1; i >= 0; i--) {
+				
+				// if the prey was eaten, remove it
+				if(prey.get(i).isDead) {
+					// if it was the oldest, find the next oldest
+					if(prey.get(i).equals(oldestPrey)) {
+						oldestPrey = prey.get(0);
+						if(i == 0) {
+							oldestPrey = prey.get(1);
+						}
+						for(Ing j : prey) {
+							if(j.age > oldestPrey.age) {
+								if(!j.equals(prey.get(i))) {
+									oldestPrey = j;
+								}
+							}
+						}
+					}
+					prey.remove(i);
+					continue;
+				}
+				
+				// update and check if child was created and if so, add it to the list
+				Ing child = prey.get(i).update(width,height,prey,predators);
+				if (child != null) {
+					prey.add(child);
+				}
+			}
+
+			// if the current population is below the minimum, repopulate with new Ing
+			if(predators.size() < minPop) {
+				predators.addAll(getNewIngs(1,1));
+			}
+			if(prey.size() < minPop) {
+				prey.addAll(getNewIngs(1,2));
+			}
+			
+			// update labels showing ages of oldest Ing of each type
+			oldestLabel1.setText("B: "+Integer.toString(oldestPrey.age/10));
+			oldestLabel2.setText("R: "+Integer.toString(oldestPred.age/10));
+			
+			canvas.repaint();
+		}
+	}
+	
+	// save canvas width and height in main class
+	int width;
+	int height;
+	
+	public class Canvas extends JPanel {
+		
+		// radius for filled circles representing Ing
+		int dotR = 5;
+		
+		@Override
+		public void paintComponent(Graphics g) {
+			super.paintComponent(g);
+			width = getWidth();
+			height = getHeight();
+			
+			g.setColor(Color.RED);
+			for(Ing i : predators) {
+				g.fillOval(i.x-dotR, i.y-dotR, 2*dotR, 2*dotR);
+			}
+			g.setColor(Color.BLUE);
+			for(Ing i : prey) {
+				g.fillOval(i.x-dotR, i.y-dotR, 2*dotR, 2*dotR);
+			}
+			
+			// draw black circles around oldest predator and prey
+			g.setColor(Color.BLACK);
+			g.drawOval(oldestPred.x-2*dotR, oldestPred.y-2*dotR, 4*dotR, 4*dotR);
+			g.drawOval(oldestPrey.x-2*dotR, oldestPrey.y-2*dotR, 4*dotR, 4*dotR);
+		}
+		
+	}
+
+	/* This class describes one of the creatures in the simulation. The same code
+	 * is used for both predators and prey. Ing have a number of genetic variables
+	 * which do not change after an Ing is created. These genes are passed onto
+	 * child Ing through genetic crossover and mutation when two Ing mate.
+	 */
+	
+	public static class Ing {
+		
+		int x;   // current x position
+		int y;   // current y position
+		int dir; // direction angle, 1 to 360, starting east going ccw
+		int v;   // velocity
+		int age = 0;
+		int type; // 1 for predator, 2 for prey
+		
+		// Ing cannot mate for a given time period after a previous mating
+		boolean ableToMate = false;
+		int mateTimer = IngSimulation.ticksUntilAbleToMate;
+		
+		// Predator Ing cannot eat again for a given time after eating
+		boolean isHungry = false;
+		int hungerTimer = IngSimulation.ticksUntilHungry;
+		
+		// Predator Ing will die after a number of ticks while hungry 
+		boolean isDead = false;
+		
+		/* Genes:
+		 * 
+		 * 0 -how often velocity/direction changes when alone
+		 * 1 -how often velocity/direction changes when not alone
+		 * 2 -distance threshold to friend
+		 * 3 -distance threshold to enemy
+		 * 4 -preference for average (6 and above) or closest only (5 and below) 
+		 * 5 -preference for acting primarily based on friends (6+) or enemies (5-)
+		 * 6 -preference for whether to move due to mates when not able to mate - yes (6+) or no (5-)
+		 * 7 -preference for whether to move due to enemies when not hungry - yes (6+) or no (5-)
+		 * 8 -how much can velocity change at once
+		 * 9 -maximum possible velocity
+		 * 10-input direction modifier (near friend) - towards target (6+) or away (5-)
+		 * 11-random direction modifier (near friend)
+		 * 12-additional direction modifier (near friend)
+		 * 13-input direction modifier (near enemy) - towards target (6+) or away (5-)
+		 * 14-random direction modifier (near enemy)
+		 * 15-additional direction modifier (near enemy)
+		 * 
+		 * (direction equation: A*[direction to Ing]+B*[nextGaussian]+C % 360)
+		 */
+		
+		static int numOfGenes = 16;
+		static int[] geneMinValues = new int[]{10,10,15,15,1, 1, 1, 1, 1, 4, 1, 0,-60,1, 0,-60};
+		static int[] geneMaxValues = new int[]{40,40,99,99,10,10,10,10,10,20,10,60,60,10,60,60};
+		static int[] mutationMaxes = new int[]{5, 5, 7, 7, 2, 2, 2, 2, 2, 4, 2, 10,25,2, 10,25};
+		
+		// mutation maxes = max magnitudes (goes positive to negative of specified value)
+		
+		int[] genome;
+		Random rand = new Random();
+		boolean useMutation = true;
+		int mutationProb = 90;   // high probability of mutation due to number of genes
+
+		// constructor
+		public Ing(int[] genome, int type, int x, int y, int dir, int v) {
+			this.genome = genome;
+			this.type = type;
+			this.x = x;
+			this.y = y;
+			this.dir = dir;
+			this.v = v;
+		}
+		
+		// code to run on each tick of simulation. mates are Ing of same type
+		public Ing update(int width, int height, ArrayList<Ing> mates, ArrayList<Ing> others) {
+			age++;
+			
+			// change velocity and direction, depending on tick and nearby Ing
+			if(age % genome[0] == 0 || age % genome[1] == 0) {
+				
+				// detect
+				int typeDetected = 0; //0 = none, 1 = mate, 2 = other
+				int inputDir = 0; //direction towards detected Ing
+				int dist, closestIngX, closestIngY, count;
+				
+				// look for mates to detect
+				if(ableToMate || genome[6] > 5) {
+					
+					dist = geneMaxValues[2]+1; //initial value for dist to closest Ing
+					closestIngX = 0;
+					closestIngY = 0;
+					count = 0;
+					for(Ing i : mates) {
+						if(!this.equals(i)) {
+							// find distance to mate, check if within threshold
+							int tempDist = approxDist(i);
+							if(tempDist < genome[2]) {
+								count++;
+								// if detecting closest only
+								if(genome[4] < 6) {
+									if(tempDist < dist) {
+										closestIngX = i.x;
+										closestIngY = i.y;
+										dist = tempDist;
+									}
+								}
+								// if using average of all detected
+								else {
+									closestIngX += i.x;
+									closestIngY += i.y;
+								}
+							}
+						}
+					}
+					// if any mates were detected
+					if(count > 0) {
+						typeDetected = 1;
+						// if using average of all detected
+						if(genome[4] > 5) {
+							closestIngX /= count;
+							closestIngY /= count;
+						}
+						// 360 degree direction to closest Ing or average of those within threshold
+						inputDir = (int)((Math.atan2(closestIngY-y,closestIngX-x)*180/Math.PI)+360) % 360;
+					}
+				}
+				
+				// look for others (similar code to looking for mates)
+				// only if no mates detected or acting based on others detected is preferred,
+				// AND the Ing is a prey, a hungry predator, or looking regardless of hunger
+				if((typeDetected == 0 || genome[5] < 6) && (type == 2 || isHungry || genome[7] > 5)) {
+					
+					dist = geneMaxValues[3]+1; //initial value for dist to closest Ing
+					closestIngX = 0;
+					closestIngY = 0;
+					count = 0;
+					for(Ing i : others) {
+						if(!this.equals(i)) {
+							// find distance to other, check if within threshold
+							int tempDist = approxDist(i);
+							if(tempDist < genome[3]) {
+								count++;
+								// if detecting closest only
+								if(genome[4] < 6) {
+									if(tempDist < dist) {
+										closestIngX = i.x;
+										closestIngY = i.y;
+										dist = tempDist;
+									}
+								}
+								// if using average of all detected
+								else {
+									closestIngX += i.x;
+									closestIngY += i.y;
+								}
+							}
+						}
+					}
+					// if any others were detected
+					if(count > 0) {
+						typeDetected = 1;
+						// if using average of all detected
+						if(genome[4] > 5) {
+							closestIngX /= count;
+							closestIngY /= count;
+						}
+						inputDir = (int)((Math.atan2(closestIngY-y,closestIngX-x)*180/Math.PI)+360) % 360;
+					}
+				}
+				
+				// no other Ing detected
+				if(typeDetected == 0) {
+					if(age % genome[0] == 0) {
+						
+						//change velocity 
+						v += rand.nextGaussian()*genome[8]/2.5;
+						
+						//ensure new value is not outside range
+						if (v < 2) {
+							v = 2;
+						}
+						else if (v > genome[9]) {
+							v = genome[9];
+						}
+						
+						//change direction
+						dir = (dir + (int)(rand.nextGaussian()*90/2.5)) % 360;
+					}
+				}
+				else {
+					if(age % genome[1] == 0) {
+						
+						//change velocity 
+						v += rand.nextGaussian()*genome[8]/2.5;
+						//ensure new value is not outside range
+						if (v < 2) {
+							v = 2;
+						}
+						else if (v > genome[9]) {
+							v = genome[9];
+						}
+						
+						// mate detected only (or preferred input over other)
+						if(typeDetected == 1) {
+							//change direction based on genes 10-12
+							if(genome[10] > 6) {
+								dir = (inputDir+(int)(genome[11]*rand.nextGaussian()/2.5)+genome[12]+360) % 360;
+							}
+							else {
+								dir = (-1*inputDir+(int)(genome[11]*rand.nextGaussian()/2.5)+genome[12]+360) % 360;
+							}
+						}
+						// other detected only (or preferred input over mate)
+						else {
+							//change direction based on genes 13-15
+							if(genome[13] > 6) {
+								dir = (inputDir+(int)(genome[14]*rand.nextGaussian()/2.5)+genome[15]+360) % 360;
+							}
+							else {
+								dir = (-1*inputDir+(int)(genome[14]*rand.nextGaussian()/2.5)+genome[15]+360) % 360;
+							}
+						}
+					}
+				}
+			} // end of velocity/direction changing
+			
+			//move
+			x += v*Math.cos(dir*Math.PI/180);
+			y += v*Math.sin(dir*Math.PI/180);
+			
+			// when colliding with a wall, move away from wall in random direction
+			if(x < 1) {
+				if(y < 1) {
+					dir = rand.nextInt(90);
+				}
+				else if(y > height-2) {
+					dir = rand.nextInt(90)+270;
+				}
+				else {
+					dir = (rand.nextInt(180)+270) % 360;
+				}
+			}
+			if(x > width-2) {
+				if(y < 1) {
+					dir = rand.nextInt(90)+90;
+				}
+				else if(y > height-2) {
+					dir = rand.nextInt(90)+180;
+				}
+				else {
+					dir = rand.nextInt(180)+90;
+				}
+			}
+			if(y < 1) {
+				dir = rand.nextInt(180);
+			}
+			if(y > height-2) {
+				dir = rand.nextInt(180)+180;
+			}
+			
+			//if predator, try to eat
+			if(type == 1) {
+				hungerTimer--;
+				if(isHungry) {
+					if(hungerTimer < 1) {
+						isDead = true;
+						// predator dies, does not eat or mate
+						return null;
+					}
+					// look for potential prey
+					for(Ing i : others) {
+						if(approxDist(i) < IngSimulation.minEatDistance) {
+							i.isDead = true;
+							isHungry = false;
+							hungerTimer = IngSimulation.ticksUntilHungry;
+						}
+					}
+				}
+				// not currently hungry
+				else {
+					if(hungerTimer < 1) {
+						isHungry = true;
+						hungerTimer = IngSimulation.ticksUntilDeath;
+					}
+				}
+			}
+			
+			// find nearest mate and check if within mating distance
+			if (ableToMate) {
+				for(Ing i : mates) {
+					if(i.ableToMate) {
+						if(!i.equals(this)) {
+							if(approxDist(i) < IngSimulation.minMateDistance) {
+								ableToMate = false;
+								i.ableToMate = false;
+								return mate(i);
+							}
+						}
+					}
+				}
+			}
+			// currently unable to mate
+			else {
+				mateTimer--;
+				if(mateTimer < 1) {
+					ableToMate = true;
+					mateTimer = 100;
+				}
+			}
+			// no children were created
+			return null;
+		}
+		
+		// http://www.flipcode.com/archives/Fast_Approximate_Distance_Functions.shtml
+		public int approxDist(Ing i) {
+			int min, max;
+			int dx = i.x-x;
+			if (dx < 0) {dx = -dx;}
+			int dy = i.y-y;
+			if (dy < 0) {dy = -dy;}
+			if (dx < dy) {
+				min = dx;
+				max = dy;
+			}
+			else { 
+				min = dy;
+				max = dx;
+			}
+			//  123/128 * max + 51/128 * min 
+			return ((( max << 8 ) + ( max << 3 ) - ( max << 4 ) - ( max << 1 ) +
+		             ( min << 7 ) - ( min << 5 ) + ( min << 3 ) - ( min << 1 )) >> 8 );
+		}
+
+		// method to produce an offspring given a mating partner
+		public Ing mate(Ing d) {
+
+			// new child using crossed genes, same type and position, and random dir and v
+			Ing child = new Ing(crossover(this,d),this.type,this.x,this.y,rand.nextInt(360), rand.nextInt(6)+2);
+			
+			// mutate a random gene
+			if (rand.nextInt(100)+1 <= mutationProb) {
+
+				int gene = rand.nextInt(numOfGenes);
+
+				// add random integer from -mutationMax to +mutationMax (95th percentile)
+				child.genome[gene] += rand.nextGaussian()*mutationMaxes[gene];
+
+				//ensure new value is not outside range
+				if (child.genome[gene] < geneMinValues[gene]) {
+					child.genome[gene] = geneMinValues[gene];
+				}
+				else if (child.genome[gene] > geneMaxValues[gene]) {
+					child.genome[gene] = geneMaxValues[gene];
+				}
+			}
+			
+			// if a parent is hungry, so is the child
+			if(isHungry || d.isHungry) {
+				child.isHungry = true;
+				child.hungerTimer /= 2;
+			}
+			return child;
+		}
+
+		// method to return a gene using crossover between two parents
+		public int[] crossover(Ing parent1, Ing parent2) {
+			
+			int[] genome = new int[numOfGenes];
+			for (int i = 0; i < numOfGenes; i++) {
+				// select each gene from a randomly selected parent
+				int[] possibleGenes = new int[]{parent1.genome[i],parent2.genome[i]};
+				genome[i] = possibleGenes[rand.nextInt(2)];
+			}
+			return genome;
+		}
+
+
+		// standard object print method
+		public String toString() {
+			String str = "Ing[";
+			for (int i = 0; i < numOfGenes; i++) {
+				str += Integer.toString(genome[i]);
+				if (i != numOfGenes-1) {
+					str += ",";
+				}
+			}
+			str += "]";
+			return str;
+		}
+
+	}
+}
